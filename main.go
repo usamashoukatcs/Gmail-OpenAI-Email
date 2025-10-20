@@ -23,12 +23,13 @@ import (
 
 const (
 	excelPath       = "professors.xlsx"
-	sheetName       = "USTC"
+	sheetName       = "Huazhong"
+	schoolName      = "School of Computer Science and Technology , Huazhong University of Science and Technology"
 	attachmentPath  = "UsamaShoukatCV.pdf"
 	credentialsFile = "credentials.json"
 	tokenFile       = "token.json"
 	openAIModel     = "gpt-4o-mini"
-	maxDrafts       = 25
+	maxDrafts       = 1
 )
 
 func main() {
@@ -155,16 +156,22 @@ func generateDrafts() error {
 }
 
 func generateResearchParagraph(ctx context.Context, client *openai.Client, research string) (string, error) {
-	prompt := fmt.Sprintf(`Write a 2-4 sentence paragraph expressing genuine interest in a professor's research.
-Keep it professional, natural, and relevant to backend engineering, Golang, distributed systems, and AI.
+	prompt := fmt.Sprintf(`You are helping a student write an email paragraph to a professor about their research.
+The paragraph must sound like a genuine human — not an AI or overly formal academic tone.
+Use simple, natural English and a friendly, respectful tone.
 
-Research topic: %s
+Guidelines:
+- Write 2–3 sentences only.
+- Do NOT start with greetings or professor’s name.
+- Mix sentence lengths (not all perfect grammar).
+- Add a touch of personal reflection or curiosity.
+- Use words like “I found”, “what caught my attention”, “it was interesting to see”, “I was curious about”.
+- Do NOT use generic AI phrases like “I would love to learn more” or “I’m excited to explore”.
 
-The paragraph should:
-- Be of 2-4 sentences and in easy wordings.
-- Show understanding of the research area.
-- Connect it meaningfully with my academic background and goals.
-- End with a thoughtful, natural sentence that reflects alignment or curiosity — not generic phrases like "I would love to learn more" or "I am excited to explore this field."`, research)
+Professor’s research area: %s
+
+My background: I have experience in backend development, Golang, distributed systems, and AI. 
+Connect my background naturally to their research, but keep it casual and believable.`, research)
 
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: openAIModel,
@@ -185,26 +192,31 @@ The paragraph should:
 }
 
 func generateEmailBody(profName, researchPara string) (string, string) {
-	subject := "Request for Master's Supervision"
+	subject := "Request For Master's Supervision"
 
-	body := fmt.Sprintf(`Dear Professor %s,
+	body := fmt.Sprintf(`
+<html>
+<body>
+Dear Professor %s,<br><br>
 
-I hope this message finds you well. My name is Usama Shoukat, and I recently completed my Bachelor’s in Computer Science (CGPA 3.51/4.00) from Government Graduate College of Science, Faisalabad (affiliated with GCUF), Pakistan. I am writing to express my interest in pursuing a Master’s degree under the ANSO Scholarship at the University of Science and Technology of China (USTC) under your supervision.
+I hope you are in a good health. I am <b>Usama Shoukat</b>, and I recently completed my <b>Bachelor's in Computer Science</b> from the <b>Government College University of Faisalabad, Pakistan</b> with a CGPA of <b>3.51/4.00</b>. I have a strong background in <b>software engineering and backend systems</b> where I have worked with Golang, JavaScript, APIs, distributed systems and different AI tools.<br><br>
 
-I have a strong background in software engineering, backend development, and intelligent systems, with practical experience in Golang-based scalable APIs, distributed systems, and AI integration. During my undergraduate studies, I completed several projects, including a real-time video and chat system using Golang and WebRTC, and an AI-powered Transcripto app (Text-to-Speech & Speech-to-Text) — both reflecting my passion for combining software development with applied intelligence and research.
+I want to apply for a <b>Master’s Program under your supervision at the %s</b> via the <b>Chinese Government Scholarship (CSC) 2026</b>.<br><br>
 
-%s
+%s<br><br>
 
-If you are currently considering graduate students for your team, I would be deeply honored to receive your guidance and supervision for the 2026 intake. My CV is attached for your kind review.
+If you are accepting new students, I would like to contribute to your research and learn under your guidance for the <b>2026 intake</b>. I have attached my CV for your review.<br><br>
 
-Thank you for your time and consideration. I look forward to hearing from you and working under your guidance.
+Looking forward to hearing back from you.<br><br>
 
-Warm regards,
-Usama Shoukat
-WeChat ID: UsamaShoukatCS
-GitHub: https://github.com/usamashoukatcs
-LinkedIn: https://www.linkedin.com/in/usama-shoukat/
-`, profName, researchPara)
+Best regards,<br>
+<b>Usama Shoukat</b><br>
+WeChat ID: UsamaShoukatCS<br>
+GitHub: <a href="https://github.com/usamashoukatcs">github.com/usamashoukatcs</a><br>
+LinkedIn: <a href="https://www.linkedin.com/in/usama-shoukat/">linkedin.com/in/usama-shoukat</a>
+</body>
+</html>
+`, profName, schoolName, researchPara)
 
 	return subject, body
 }
@@ -255,8 +267,8 @@ func buildRawEmail(to, subject, plainBody, attachmentFile string) (string, error
 	// HTML part (replace line breaks with <br>)
 	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
 	msg.WriteString("Content-Type: text/html; charset=utf-8\r\n\r\n")
-	htmlBody := "<html><body>" + strings.ReplaceAll(plainBody, "\n", "<br>") + "</body></html>\r\n"
-	msg.WriteString(htmlBody + "\r\n")
+	//htmlBody := "<html><body>" + strings.ReplaceAll(plainBody, "\n", "<br>") + "</body></html>\r\n"
+	msg.WriteString(plainBody + "\r\n")
 
 	// Attachment part
 	data, err := os.ReadFile(attachmentFile)
