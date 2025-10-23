@@ -23,13 +23,13 @@ import (
 
 const (
 	excelPath       = "professors.xlsx"
-	sheetName       = "Huazhong"
-	schoolName      = "School of Computer Science and Technology , Huazhong University of Science and Technology"
+	sheetName       = "Sichuan University"
+	schoolName      = "College of Computer Science, Sichuan University"
 	attachmentPath  = "UsamaShoukatCV.pdf"
 	credentialsFile = "credentials.json"
 	tokenFile       = "token.json"
 	openAIModel     = "gpt-4o-mini"
-	maxDrafts       = 1
+	maxDrafts       = 30
 )
 
 func main() {
@@ -156,27 +156,27 @@ func generateDrafts() error {
 }
 
 func generateResearchParagraph(ctx context.Context, client *openai.Client, research string) (string, error) {
-	prompt := fmt.Sprintf(`You are helping a student write an email paragraph to a professor about their research.
-The paragraph must sound like a genuine human — not an AI or overly formal academic tone.
-Use simple, natural English and a friendly, respectful tone.
+	prompt := fmt.Sprintf(`You are helping a student write a short email paragraph to a professor about their research.
+The paragraph should sound human, polite, and written in simple, clear English — like a non-native speaker who writes carefully.
 
 Guidelines:
 - Write 2–3 sentences only.
-- Do NOT start with greetings or professor’s name.
-- Mix sentence lengths (not all perfect grammar).
-- Add a touch of personal reflection or curiosity.
-- Use words like “I found”, “what caught my attention”, “it was interesting to see”, “I was curious about”.
-- Do NOT use generic AI phrases like “I would love to learn more” or “I’m excited to explore”.
+- Avoid greetings or professor’s name.
+- Keep grammar correct but simple (no complex vocabulary).
+- Use phrases like “Your contribution to… was of great interest to me,” “I was interested in knowing how…,” “It is interesting to consider…”
+- Avoid phrases like “I would love to learn more,” “I’m excited,” or “I am passionate.”
+- Write in a natural, slightly formal tone — respectful but not robotic.
+- Connect my background naturally to their work.
 
 Professor’s research area: %s
 
 My background: I have experience in backend development, Golang, distributed systems, and AI. 
-Connect my background naturally to their research, but keep it casual and believable.`, research)
+Link this background naturally to their research.`, research)
 
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: openAIModel,
 		Messages: []openai.ChatCompletionMessage{
-			{Role: "system", Content: "You are an academic writing assistant."},
+			{Role: "system", Content: "You are a professional academic writing assistant."},
 			{Role: "user", Content: prompt},
 		},
 	})
