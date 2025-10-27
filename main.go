@@ -23,8 +23,8 @@ import (
 
 const (
 	excelPath       = "professors.xlsx"
-	sheetName       = "Sichuan University"
-	schoolName      = "College of Computer Science, Sichuan University"
+	sheetName       = "UESTC"
+	schoolName      = "School of Information and Software Engineering, University of Electronic Science and Technology of China (UESTC)"
 	attachmentPath  = "UsamaShoukatCV.pdf"
 	credentialsFile = "credentials.json"
 	tokenFile       = "token.json"
@@ -192,7 +192,7 @@ Link this background naturally to their research.`, research)
 }
 
 func generateEmailBody(profName, researchPara string) (string, string) {
-	subject := "Request For Master's Supervision"
+	subject := "Request for Master's Supervision (September 2026 Intake)"
 
 	body := fmt.Sprintf(`
 <html>
