@@ -22,14 +22,17 @@ import (
 )
 
 const (
-	excelPath       = "professors.xlsx"
-	sheetName       = "UESTC"
-	schoolName      = "School of Information and Software Engineering, University of Electronic Science and Technology of China (UESTC)"
-	attachmentPath  = "UsamaShoukatCV.pdf"
-	credentialsFile = "credentials.json"
-	tokenFile       = "token.json"
-	openAIModel     = "gpt-4o-mini"
-	maxDrafts       = 30
+	excelPath          = "professors.xlsx"
+	scholarshipType    = "ANSO Scholarship "
+	followUpSheetName  = "ZJU"
+	followUpSchoolName = "Zhejiang University"
+	sheetName          = "UCAS"
+	schoolName         = "University of Chinese Academy of Sciences"
+	attachmentPath     = "UsamaShoukatCV.pdf"
+	credentialsFile    = "credentials.json"
+	tokenFile          = "token.json"
+	openAIModel        = "gpt-4o-mini"
+	maxDrafts          = 30
 )
 
 func main() {
@@ -44,20 +47,32 @@ func main() {
 		log.Fatal("OPENAI_API_KEY not set")
 	}
 
-	if err := generateDrafts(); err != nil {
+	mode := "initial"
+	if len(os.Args) > 1 && (os.Args[1] == "followup" || os.Args[1] == "initial") {
+		mode = os.Args[1]
+	}
+
+	log.Printf("Mode: %s", strings.ToUpper(mode))
+
+	if err := generateDrafts(mode); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 
 	log.Println("✅ Done! Check your Gmail Drafts folder.")
 }
 
-func generateDrafts() error {
-	// Open Excel
+func generateDrafts(mode string) error {
 	f, err := excelize.OpenFile(excelPath)
 	if err != nil {
 		return fmt.Errorf("open excel: %w", err)
 	}
-	rows, err := f.GetRows(sheetName)
+
+	sheet := sheetName
+	if mode == "followup" {
+		sheet = followUpSheetName
+	}
+
+	rows, err := f.GetRows(sheet)
 	if err != nil {
 		return fmt.Errorf("read rows: %w", err)
 	}
@@ -66,9 +81,12 @@ func generateDrafts() error {
 		return fmt.Errorf("no data rows found")
 	}
 
-	// Load progress from file (to continue from where it left off)
-	progressFile := "progress.txt"
-	startIndex := 1 // skip header by default
+	progressFile := sheet + "Progress.txt"
+	if mode == "followup" {
+		progressFile = "followUpProgress.txt"
+	}
+
+	startIndex := 1
 
 	if data, err := os.ReadFile(progressFile); err == nil {
 		var savedIndex int
@@ -125,13 +143,21 @@ func generateDrafts() error {
 			continue
 		}
 
-		para, err := generateResearchParagraph(ctx, aiClient, research)
-		if err != nil {
-			log.Printf("OpenAI error for %s: %v (fallback used)", name, err)
-			para = fmt.Sprintf("Your research on %s strongly aligns with my academic background and interests.", research)
-		}
+		var subject, body string
 
-		subject, body := generateEmailBody(name, para)
+		if mode == "followup" {
+			topics := getRelevantTopics(ctx, aiClient, research)
+
+			subject = "Follow up on Master's Supervision Request (September 2026 Intake)"
+			body = generateFollowupEmailBody(name, followUpSchoolName, topics)
+		} else {
+			para, err := generateResearchParagraph0(ctx, aiClient, research)
+			if err != nil {
+				log.Printf("OpenAI error for %s: %v (fallback used)", name, err)
+				para = fmt.Sprintf("Your research on %s strongly aligns with my academic background and interests.", research)
+			}
+			subject, body = generateEmailBody1(name, para)
+		}
 
 		if err := createDraft(gSrv, email, subject, body, attachmentPath); err != nil {
 			log.Printf("❌ Draft creation failed for %s: %v", name, err)
@@ -170,13 +196,56 @@ Guidelines:
 
 Professor’s research area: %s
 
-My background: I have experience in backend development, Golang, distributed systems, and AI. 
+My background: I have experience in backend development, Golang, software engineering, distributed systems, and AI. 
 Link this background naturally to their research.`, research)
 
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: openAIModel,
 		Messages: []openai.ChatCompletionMessage{
-			{Role: "system", Content: "You are a professional academic writing assistant."},
+			{Role: "system", Content: "You are an expert academic assistant who only extracts key research topics from text."},
+			{Role: "user", Content: prompt},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices returned")
+	}
+
+	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+}
+
+func generateResearchParagraph0(ctx context.Context, client *openai.Client, research string) (string, error) {
+	prompt := fmt.Sprintf(`
+Extract the main research topics or directions from the text below. Then:
+
+1. Compare these topics with the following background areas:
+   Backend Development, Golang, Software Engineering, Distributed Systems, Databases, Cloud Computing, Cybersecurity, and AI.
+
+2. If two or more topics align with the background:
+   - Return only two that align the most based on relevance.
+
+3. If only one topic aligns:
+   - Return only that one.
+
+4. If none align:
+   - Return any two key topics from the research text.
+
+STRICT FORMAT RULES:
+- Output MUST contain exactly one " and " joining exactly two topics (unless only one aligns).
+- No commas, no extra "and"s, no sentences, no punctuation.
+- Only the topic name(s), all in lowercase.
+
+Professor’s research text:
+%s
+`, research)
+
+	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: openAIModel,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: "system", Content: "You are an expert assistant extracting relevant research topics from text."},
 			{Role: "user", Content: prompt},
 		},
 	})
@@ -193,32 +262,116 @@ Link this background naturally to their research.`, research)
 
 func generateEmailBody(profName, researchPara string) (string, string) {
 	subject := "Request for Master's Supervision (September 2026 Intake)"
-
 	body := fmt.Sprintf(`
+	<html> <body> Dear Professor %s,<br><br> 
+	I hope you are in a good health. I am <b>Usama Shoukat</b>, and I recently completed my <b>Bachelor's in Computer Science</b> 
+from the <b>Government College University of Faisalabad, Pakistan</b> with a CGPA of <b>3.51/4.00</b>. 
+I have a strong background in <b>software engineering and backend systems</b> where I have worked with Golang, JavaScript, 
+APIs, distributed systems and different AI tools.<br><br> 
+	I want to apply for a <b>Master’s Program under your supervision at the %s</b> via the <b>%s 2026</b>.<br><br> 
+	%s
+	<br><br> 
+	If you are accepting new students, I would like to contribute to your research and learn under your guidance for the 
+<b>2026 intake</b>. I have attached my CV for your review.<br><br> 
+	Looking forward to hearing back from you.<br><br> Best regards,<br> 
+	<b>Usama Shoukat</b><br> 
+	WeChat ID: UsamaShoukatCS<br> 
+	GitHub: <a href="https://github.com/usamashoukatcs">github.com/usamashoukatcs</a><br> 
+	LinkedIn: <a href="https://www.linkedin.com/in/usama-shoukat/">linkedin.com/in/usama-shoukat</a> 
+	</body> 
+	</html>
+	`, profName, schoolName, researchPara, scholarshipType)
+
+	return subject, body
+}
+
+func generateEmailBody1(profName, researchPara string) (string, string) {
+	subject := "Request for Master's Supervision (September 2026 Intake)"
+	body := fmt.Sprintf(`
+	<html> <body> Respected Professor %s,<br><br> 
+	I hope you are fine and good. I am Usama Shoukat from Pakistan. I have done my Bachelors in the field of Computer Science with a CGPA 
+	of <b>3.51/4.00</b> from Government College University Faisalabad a well known University in Pakistan. 
+	I have reviewed your research profile, and I am deeply inspired by your work, especially in the areas 
+	of <b>%s</b>. I would be eager to explore these areas further under your guidance.<br><br> 
+	I am highly motivated to pursue a Master's degree under your supervision and am fully prepared to contribute to your research group. 
+	I am confident in my ability to adapt and work on ongoing or new research directions under your guidance.<br><br>
+	I plan to apply for the %s or any equivalent scholarship offered by your institution, 
+	which would cover all my academic expenses during my studies.<br><br>
+	If possible, I kindly request an acceptance letter or email of interest from you, 
+	as this would greatly strengthen my scholarship application. I have attached my CV with this email for your review.<br><br>
+	Thank you very much for your time and consideration. I look forward to the possibility of working with you.<br><br> 
+	Best regards,<br> 
+	<b>Usama Shoukat</b><br> 
+	WeChat ID: UsamaShoukatCS<br> 
+	GitHub: <a href="https://github.com/usamashoukatcs">github.com/usamashoukatcs</a><br> 
+	LinkedIn: <a href="https://www.linkedin.com/in/usama-shoukat/">linkedin.com/in/usama-shoukat</a> 
+	</body> 
+	</html>
+	`, profName, researchPara, scholarshipType)
+
+	return subject, body
+}
+
+func getRelevantTopics(ctx context.Context, client *openai.Client, researchDirection string) string {
+	prompt := fmt.Sprintf(`From the following research directions, extract only the main topics that are most relevant to backend development, Golang, software engineering, distributed systems, and AI. 
+Return only the topic names as a short, comma-separated list (no sentences, no extra words).
+
+Research directions:
+%s`, researchDirection)
+
+	resp, err := client.CreateChatCompletion(
+		ctx,
+		openai.ChatCompletionRequest{
+			Model: openAIModel,
+			Messages: []openai.ChatCompletionMessage{
+				{Role: "user", Content: prompt},
+			},
+			Temperature: 0.3,
+		},
+	)
+	if err != nil {
+		log.Printf("Error extracting topics: %v", err)
+		return ""
+	}
+	if len(resp.Choices) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(resp.Choices[0].Message.Content)
+}
+
+func generateFollowupEmailBody(professorName, universityName, topics string) string {
+	var topicLine string
+	if topics != "" {
+		topicLine = fmt.Sprintf("<p>I’m particularly interested in your research on <strong>%s</strong>, and I believe my background in backend development and Golang aligns well with these areas.</p>", topics)
+	} else {
+		topicLine = "<p>I remain deeply interested in your ongoing research directions.</p>"
+	}
+
+	return fmt.Sprintf(`
 <html>
 <body>
-Dear Professor %s,<br><br>
+<p>Dear Professor %s,</p>
 
-I hope you are in a good health. I am <b>Usama Shoukat</b>, and I recently completed my <b>Bachelor's in Computer Science</b> from the <b>Government College University of Faisalabad, Pakistan</b> with a CGPA of <b>3.51/4.00</b>. I have a strong background in <b>software engineering and backend systems</b> where I have worked with Golang, JavaScript, APIs, distributed systems and different AI tools.<br><br>
+<p>I hope you are doing well. I’m writing to follow up on my previous message to express my continued interest in joining your research group at <strong>%s</strong>.</p>
 
-I want to apply for a <b>Master’s Program under your supervision at the %s</b> via the <b>Chinese Government Scholarship (CSC) 2026</b>.<br><br>
+%s
 
-%s<br><br>
+<p>I’m eager to contribute meaningfully and willing to put in the work required to progress effectively under your guidance.</p>
 
-If you are accepting new students, I would like to contribute to your research and learn under your guidance for the <b>2026 intake</b>. I have attached my CV for your review.<br><br>
+<p>For your convenience, I have reattached my CV.</p>
 
-Looking forward to hearing back from you.<br><br>
+<p>Thank you for your time and kind consideration.</p>
 
-Best regards,<br>
-<b>Usama Shoukat</b><br>
+<p>Best regards,<br>
+<strong>Usama Shoukat</strong><br>
 WeChat ID: UsamaShoukatCS<br>
 GitHub: <a href="https://github.com/usamashoukatcs">github.com/usamashoukatcs</a><br>
 LinkedIn: <a href="https://www.linkedin.com/in/usama-shoukat/">linkedin.com/in/usama-shoukat</a>
+</p>
 </body>
 </html>
-`, profName, schoolName, researchPara)
+`, professorName, universityName, topicLine)
 
-	return subject, body
 }
 
 func getGmailService() (*gmail.Service, error) {
