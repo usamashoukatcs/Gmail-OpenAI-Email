@@ -26,8 +26,8 @@ const (
 	scholarshipType   = "CSC Scholarship"
 	followUpSheetName = "ZJU"
 	//followUpSchoolName = "Zhejiang University"
-	sheetName       = "UESTC"
-	schoolName      = "University of Electronic Science and Technology of China (UESTC)"
+	sheetName = "Beihang University"
+	//schoolName      = "Wuhan University of technology"
 	attachmentPath  = "UsamaShoukatCV.pdf"
 	credentialsFile = "credentials.json"
 	tokenFile       = "token.json"
@@ -197,15 +197,16 @@ My intended research plan involves exploring distributed systems and backend tec
 with an emphasis on building efficient, reliable, and scalable software systems.
 I am also interested in integrating AI-based optimization or automation approaches into software engineering problems.
 `
+	surname := extractSurname(profName)
 
 	intro := fmt.Sprintf(`
 Respected Professor %s,<br><br>
-I hope you are doing well.`, profName)
+I hope you are doing well.`, surname)
 
 	if mode == "followup" {
 		intro = fmt.Sprintf(`
 Respected Professor %s,<br><br>
-I hope you are doing well. I wanted to kindly follow up on my previous email regarding the possibility of pursuing a Master's degree under your supervision.`, profName)
+I hope you are doing well. I wanted to kindly follow up on my previous email regarding the possibility of pursuing a Master's degree under your supervision.`, surname)
 	}
 
 	subject := getRandomSubject()
@@ -361,4 +362,12 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 		log.Fatalf("Token exchange error: %v", err)
 	}
 	return tok
+}
+
+func extractSurname(fullName string) string {
+	parts := strings.Fields(fullName)
+	if len(parts) == 0 {
+		return fullName
+	}
+	return parts[0] // Chinese surname is always first
 }
